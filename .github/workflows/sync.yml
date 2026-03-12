@@ -1,12 +1,12 @@
 name: Upstream Sync
 
 permissions:
-  contents: write
+  contents: write  # 保留写入权限
 
 on:
   schedule:
-    - cron: "0 4 * * *" # At 12PM UTC+8
-  workflow_dispatch:
+    - cron: "0 4 * * *" # 北京时间12点同步（UTC+8）
+  workflow_dispatch:    # 保留手动触发
 
 jobs:
   sync_latest_from_upstream:
@@ -15,11 +15,13 @@ jobs:
     if: ${{ github.event.repository.fork }}
 
     steps:
-      # Step 1: run a standard checkout action
+      # Step 1: 拉取当前仓库代码
       - name: Checkout target repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 新增：拉取所有历史，避免同步冲突
 
-      # Step 2: run the sync action
+      # Step 2: 同步上游仓库代码
       - name: Sync upstream changes
         id: sync
         uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.1
@@ -29,6 +31,17 @@ jobs:
           target_sync_branch: main
           target_repo_token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Step 3: 新增「空提交」，保持仓库活跃（核心：避免60天禁用）
+      - name: Keep repo active (auto empty commit)
+        if: success()  # 仅同步成功时执行
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          # 提交空记录，标记仓库活跃
+          git commit --allow-empty -m "Auto commit: keep repo active (sync success)"
+          git push origin main
+
+      # Step 4: 同步失败提醒
       - name: Sync check
         if: failure()
         run: |
